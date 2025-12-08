@@ -1,0 +1,32 @@
+[
+  {
+    "id": "1",
+    "content": "[P1-1] Setup Next.js project with TypeScript, Tailwind, install dependencies, and configure Turso local dev",
+    "status": "completed"
+  },
+  {
+    "id": "2",
+    "content": "[P1-2] Define database schema (users, listings tables) and push to local Turso instance",
+    "status": "completed"
+  },
+  {
+    "id": "3",
+    "content": "[P2] Setup Better Auth with email OTP, create auth API routes, build login/signup UI",
+    "status": "completed"
+  },
+  {
+    "id": "4",
+    "content": "[P3] Build responsive homepage with hero, search bar, listings grid, sidebar placeholder, and footer",
+    "status": "completed"
+  },
+  {
+    "id": "5",
+    "content": "[P4] Create auth-protected listing detail pages with middleware and API endpoints",
+    "status": "completed"
+  },
+  {
+    "id": "6",
+    "content": "[P5] Build admin dashboard with CRUD operations for listings management",
+    "status": "completed"
+  }
+]
