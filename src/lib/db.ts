@@ -13,21 +13,6 @@ export const sql = neon(databaseUrl);
 // Database utility functions
 export const db = {
   /**
-   * Execute a raw SQL query
-   * @param query SQL query string
-   * @param params Query parameters
-   * @returns Query results
-   */
-  async query(query: string, params: any[] = []) {
-    try {
-      return await sql(query, params);
-    } catch (error) {
-      console.error('Database query error:', error);
-      throw error;
-    }
-  },
-
-  /**
    * Get user by email
    */
   async getUserByEmail(email: string) {
