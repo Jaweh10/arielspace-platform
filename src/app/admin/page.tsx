@@ -39,19 +39,35 @@ export default function AdminDashboard() {
     loadListings();
   }, [isAuthenticated, isAdmin, router]);
 
-  const loadListings = () => {
-    const stored = localStorage.getItem('internship_listings');
-    if (stored) {
-      setListings(JSON.parse(stored));
+  const loadListings = async () => {
+    try {
+      const response = await fetch('/api/listings');
+      const data = await response.json();
+      setListings(data.listings || []);
+    } catch (error) {
+      console.error('Error loading listings:', error);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this listing?')) {
-      const updated = listings.filter(l => l.id !== id);
-      localStorage.setItem('internship_listings', JSON.stringify(updated));
-      setListings(updated);
+      try {
+        const response = await fetch(`/api/listings/${id}`, {
+          method: 'DELETE',
+        });
+
+        if (response.ok) {
+          // Reload listings after successful delete
+          await loadListings();
+        } else {
+          alert('Failed to delete listing');
+        }
+      } catch (error) {
+        console.error('Error deleting listing:', error);
+        alert('Network error. Please try again.');
+      }
     }
   };
 

@@ -6,17 +6,27 @@ import SearchBar from '@/components/SearchBar';
 import ListingCard from '@/components/ListingCard';
 import Footer from '@/components/Footer';
 import SessionWarning from '@/components/SessionWarning';
-import { getAllListings } from '@/lib/listings';
-
 export default function ExplorePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [allListings, setAllListings] = useState<any[]>([]);
   const [filteredListings, setFilteredListings] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const listings = getAllListings();
-    setAllListings(listings);
-    setFilteredListings(listings);
+    // Fetch listings from API
+    async function fetchListings() {
+      try {
+        const response = await fetch('/api/listings');
+        const data = await response.json();
+        setAllListings(data.listings);
+        setFilteredListings(data.listings);
+      } catch (error) {
+        console.error('Error fetching listings:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchListings();
   }, []);
 
   const handleSearch = (query: string) => {
@@ -56,7 +66,12 @@ export default function ExplorePage() {
 
       {/* Listings Grid */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        {filteredListings.length > 0 ? (
+        {isLoading ? (
+          <div className="text-center py-12">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+            <p className="mt-4 text-slate-600">Loading listings...</p>
+          </div>
+        ) : filteredListings.length > 0 ? (
           <>
             <div className="mb-6">
               <p className="text-slate-600">

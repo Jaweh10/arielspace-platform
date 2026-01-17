@@ -15,6 +15,9 @@ export default function EditListingPage() {
     fullDetails: '',
     hasCertification: true,
     applyUrl: '',
+    location: '',
+    duration: '',
+    deadline: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -32,26 +35,41 @@ export default function EditListingPage() {
       return;
     }
 
-    // Load listing data
-    const stored = localStorage.getItem('internship_listings');
-    if (stored) {
-      const listings = JSON.parse(stored);
-      const listing = listings.find((l: any) => l.id === params.id);
-      
-      if (listing) {
-        setFormData({
-          title: listing.title,
-          shortDescription: listing.shortDescription,
-          fullDetails: listing.fullDetails,
-          hasCertification: listing.hasCertification,
-          applyUrl: listing.applyUrl,
-        });
-      } else {
+    // Load listing data from API
+    async function fetchListing() {
+      try {
+        console.log('Fetching listing with ID:', params.id);
+        const response = await fetch(`/api/listings/${params.id}`);
+        console.log('Response status:', response.status);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Listing data:', data);
+          const listing = data.listing;
+          
+          setFormData({
+            title: listing.title || '',
+            shortDescription: listing.shortDescription || listing.short_description || '',
+            fullDetails: listing.fullDetails || listing.full_details || '',
+            hasCertification: listing.hasCertification ?? listing.has_certification ?? false,
+            applyUrl: listing.applyUrl || listing.apply_url || '',
+            location: listing.location || '',
+            duration: listing.duration || '',
+            deadline: listing.deadline ? listing.deadline.split('T')[0] : '',
+          });
+        } else {
+          console.error('Failed to fetch listing:', response.status);
+          const errorData = await response.json();
+          console.error('Error data:', errorData);
+          setNotFound(true);
+        }
+      } catch (error) {
+        console.error('Error fetching listing:', error);
         setNotFound(true);
       }
-    } else {
-      setNotFound(true);
     }
+    
+    fetchListing();
   }, [isAuthenticated, params.id, router]);
 
   const handleSubmit = async (e: FormEvent) => {
@@ -79,29 +97,27 @@ export default function EditListingPage() {
     }
 
     try {
-      // Get existing listings
-      const stored = localStorage.getItem('internship_listings');
-      const listings = stored ? JSON.parse(stored) : [];
+      // Call API to update listing
+      const response = await fetch(`/api/listings/${params.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
 
-      // Find and update the listing
-      const index = listings.findIndex((l: any) => l.id === params.id);
-      if (index !== -1) {
-        listings[index] = {
-          ...listings[index],
-          ...formData,
-        };
+      const data = await response.json();
 
-        // Save to localStorage
-        localStorage.setItem('internship_listings', JSON.stringify(listings));
-
+      if (!response.ok) {
+        setError(data.error || 'Failed to update listing');
         setIsLoading(false);
-        router.push('/admin');
-      } else {
-        setError('Listing not found');
-        setIsLoading(false);
+        return;
       }
+
+      setIsLoading(false);
+      router.push('/admin');
     } catch (err) {
-      setError('Failed to update listing. Please try again.');
+      setError('Network error. Please try again.');
       setIsLoading(false);
     }
   };
@@ -238,6 +254,50 @@ Regular paragraph text"
               <p className="text-sm text-slate-500 mt-1">
                 External link where users will submit their applications
               </p>
+            </div>
+
+            {/* Location */}
+            <div>
+              <label htmlFor="location" className="block text-sm font-medium text-slate-700 mb-2">
+                Location
+              </label>
+              <input
+                type="text"
+                id="location"
+                value={formData.location}
+                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-900"
+                placeholder="e.g., Lagos, Nigeria or Remote"
+              />
+            </div>
+
+            {/* Duration */}
+            <div>
+              <label htmlFor="duration" className="block text-sm font-medium text-slate-700 mb-2">
+                Duration
+              </label>
+              <input
+                type="text"
+                id="duration"
+                value={formData.duration}
+                onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-900"
+                placeholder="e.g., 3 months or 6 weeks"
+              />
+            </div>
+
+            {/* Deadline */}
+            <div>
+              <label htmlFor="deadline" className="block text-sm font-medium text-slate-700 mb-2">
+                Application Deadline
+              </label>
+              <input
+                type="date"
+                id="deadline"
+                value={formData.deadline}
+                onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-900"
+              />
             </div>
 
             {/* Certification */}

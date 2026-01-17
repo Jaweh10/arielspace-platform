@@ -33,23 +33,46 @@ export default function LoginPage() {
     setIsLoading(true);
 
     // Basic validation
-    if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (!formData.email || !formData.password) {
+      setError('Please enter both email and password');
       setIsLoading(false);
       return;
     }
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      // Call login API
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+        }),
+      });
 
-    // For demo purposes, accept any credentials
-    login(formData.email);
-    setIsLoading(false);
-    
-    // Redirect to intended page or home
-    const redirectTo = sessionStorage.getItem('redirectAfterLogin') || '/';
-    sessionStorage.removeItem('redirectAfterLogin');
-    router.push(redirectTo);
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'Login failed. Please check your credentials.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Login user with returned data
+      login(data.user.email, data.user.name);
+      
+      // Redirect to intended page or home
+      const redirectTo = sessionStorage.getItem('redirectAfterLogin') || '/';
+      sessionStorage.removeItem('redirectAfterLogin');
+      router.push(redirectTo);
+
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setError('Network error. Please check your connection and try again.');
+      setIsLoading(false);
+    }
   };
 
   return (

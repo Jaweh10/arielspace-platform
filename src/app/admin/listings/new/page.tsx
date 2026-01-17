@@ -14,6 +14,9 @@ export default function NewListingPage() {
     fullDetails: '',
     hasCertification: true,
     applyUrl: '',
+    location: '',
+    duration: '',
+    deadline: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -54,32 +57,27 @@ export default function NewListingPage() {
     }
 
     try {
-      // Get existing listings
-      const stored = localStorage.getItem('internship_listings');
-      const listings = stored ? JSON.parse(stored) : [];
+      // Call API to create listing
+      const response = await fetch('/api/listings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
 
-      // Check capacity (max 30)
-      if (listings.length >= 30) {
-        setError('Maximum capacity reached (30 listings). Please delete some listings first.');
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'Failed to create listing');
         setIsLoading(false);
         return;
       }
 
-      // Create new listing
-      const newListing = {
-        id: Date.now().toString(),
-        ...formData,
-        createdAt: new Date().toISOString(),
-      };
-
-      // Save to localStorage
-      listings.push(newListing);
-      localStorage.setItem('internship_listings', JSON.stringify(listings));
-
       setIsLoading(false);
       router.push('/admin');
     } catch (err) {
-      setError('Failed to create listing. Please try again.');
+      setError('Network error. Please try again.');
       setIsLoading(false);
     }
   };
@@ -189,6 +187,50 @@ Regular paragraph text"
               <p className="text-sm text-slate-500 mt-1">
                 External link where users will submit their applications
               </p>
+            </div>
+
+            {/* Location */}
+            <div>
+              <label htmlFor="location" className="block text-sm font-medium text-slate-700 mb-2">
+                Location
+              </label>
+              <input
+                type="text"
+                id="location"
+                value={formData.location}
+                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-900"
+                placeholder="e.g., Lagos, Nigeria or Remote"
+              />
+            </div>
+
+            {/* Duration */}
+            <div>
+              <label htmlFor="duration" className="block text-sm font-medium text-slate-700 mb-2">
+                Duration
+              </label>
+              <input
+                type="text"
+                id="duration"
+                value={formData.duration}
+                onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-900"
+                placeholder="e.g., 3 months or 6 weeks"
+              />
+            </div>
+
+            {/* Deadline */}
+            <div>
+              <label htmlFor="deadline" className="block text-sm font-medium text-slate-700 mb-2">
+                Application Deadline
+              </label>
+              <input
+                type="date"
+                id="deadline"
+                value={formData.deadline}
+                onChange={(e) => setFormData({ ...formData, deadline: e.target.value })}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-900"
+              />
             </div>
 
             {/* Certification */}

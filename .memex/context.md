@@ -8,8 +8,8 @@
 - **Styling**: Tailwind CSS v3 (NOT v4 - causes lightningcss issues)
 - **Font**: Inter (Google Fonts)
 - **State Management**: React Context API (AuthContext)
-- **Data Storage**: localStorage (client-side, max 30 listings)
-- **Hosting**: Netlify (deployment target)
+- **Database**: Neon PostgreSQL (migrating from localStorage)
+- **Hosting**: Netlify (successfully deployed)
 
 ## Design System (Minimalist B2B Professional)
 - **Primary Colors**: 
@@ -22,47 +22,101 @@
 
 ## Authentication System
 
-### Role-Based Access Control
+### Admin Credentials
 ```typescript
-// User Roles
-type Role = 'user' | 'admin';
+// Admin accounts with hardcoded credentials
+const adminCredentials = {
+  email: 'admin@arielspace.com',
+  password: '$+davfil98+$'  // Fixed admin password
+};
 
-// Admin Emails (hardcoded in AuthContext.tsx)
+// Additional admin emails can be added
 const adminEmails = [
   'admin@arielspace.com',
   'admin@example.com'
 ];
 ```
 
+### Authentication Requirements
+- **Login**: Only users with accounts in database can login
+- **Signup**: Creates new user record in database
+- **Admin Access**: Specific admin email with hardcoded password
+- **Role Assignment**: Automatic based on email address
+
 ### Session Management
 - **Timeout**: 5 minutes of inactivity
 - **Warning**: Shows at 4 minutes (60-second countdown)
 - **Activity Tracking**: mousedown, keydown, scroll, touchstart, click events
-- **Storage**: `localStorage` for user data and `lastActivity` timestamp
+- **Storage**: Database for user data, localStorage for session tracking
 
 ### Authentication Flow
-1. User signs up/logs in
-2. System checks if email is in admin list
-3. Assigns role: 'admin' or 'user'
-4. Stores in localStorage with session tracking
-5. Auto-logout after 5 minutes of inactivity
+1. User attempts login with email/password
+2. System checks database for existing user
+3. Verifies password hash (or admin hardcoded password)
+4. Checks if email is in admin list
+5. Assigns role: 'admin' or 'user'
+6. Creates session with 5-minute timeout
+
+## Database Schema (Neon PostgreSQL)
+
+### Users Table
+```sql
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email VARCHAR(255) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  first_name VARCHAR(100) NOT NULL,
+  last_name VARCHAR(100) NOT NULL,
+  phone VARCHAR(50),
+  role VARCHAR(20) DEFAULT 'user', -- 'user' or 'admin'
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Listings Table
+```sql
+CREATE TABLE listings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title VARCHAR(255) NOT NULL,
+  short_description TEXT NOT NULL,
+  full_details TEXT NOT NULL,
+  has_certification BOOLEAN DEFAULT false,
+  apply_url VARCHAR(500) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  created_by UUID REFERENCES users(id)
+);
+```
+
+### Sessions Table (optional for advanced session management)
+```sql
+CREATE TABLE sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id),
+  token VARCHAR(255) UNIQUE NOT NULL,
+  last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
 
 ## Project Structure
 
 ```
 src/
 ├── app/
-│   ├── page.tsx                    # Homepage (shows first 3 listings)
-│   ├── explore/page.tsx            # All listings page
+│   ├── page.tsx                    # Homepage (shows first 3 listings from DB)
+│   ├── explore/page.tsx            # All listings page (from DB)
 │   ├── auth/
-│   │   ├── login/page.tsx          # Email + password login
-│   │   └── signup/page.tsx         # Full signup form (6 fields + terms)
+│   │   ├── login/page.tsx          # Email + password login (DB verification)
+│   │   └── signup/page.tsx         # Full signup form (creates DB record)
 │   ├── profile/page.tsx            # User profile (auth required)
-│   ├── listings/[id]/page.tsx      # Listing details (auth required)
+│   ├── listings/[id]/page.tsx      # Listing details (auth required, from DB)
 │   └── admin/                      # Admin dashboard (admin role required)
 │       ├── page.tsx                # Dashboard overview
-│       ├── listings/new/page.tsx   # Add listing form
-│       └── listings/[id]/edit/page.tsx  # Edit listing form
+│       ├── listings/new/page.tsx   # Add listing form (saves to DB)
+│       └── listings/[id]/edit/page.tsx  # Edit listing form (updates DB)
 ├── components/
 │   ├── Navbar.tsx                  # Role-aware navigation
 │   ├── ListingCard.tsx             # Listing card with auth check
@@ -70,33 +124,16 @@ src/
 │   └── WelcomeMessage.tsx          # Post-login greeting
 ├── contexts/
 │   └── AuthContext.tsx             # Authentication & session management
-└── lib/
-    └── listings.ts                 # Data utilities (localStorage)
-```
-
-## Data Model
-
-### User Object
-```typescript
-interface User {
-  id: string;              // Timestamp-based ID
-  email: string;
-  name: string;            // First + Last name
-  role: 'user' | 'admin';
-}
-```
-
-### Listing Object
-```typescript
-interface Listing {
-  id: string;              // Timestamp-based ID
-  title: string;
-  shortDescription: string;     // Max 200 chars, shown on cards
-  fullDetails: string;          // Full markdown-style description
-  hasCertification: boolean;
-  applyUrl: string;            // External application link
-  createdAt: string;           // ISO timestamp
-}
+├── lib/
+│   ├── db.ts                       # Database connection utilities
+│   └── listings.ts                 # Listing CRUD operations
+└── api/
+    ├── auth/
+    │   ├── login.ts                # Login endpoint
+    │   └── signup.ts               # Signup endpoint
+    └── listings/
+        ├── index.ts                # Get all listings
+        └── [id].ts                 # Get/update/delete listing
 ```
 
 ## Security Patterns
@@ -124,6 +161,23 @@ useEffect(() => {
 }, [isAuthenticated, isAdmin, router]);
 ```
 
+### Password Security
+```typescript
+// Use bcrypt for password hashing
+import bcrypt from 'bcrypt';
+
+// On signup
+const passwordHash = await bcrypt.hash(password, 10);
+
+// On login
+const isValid = await bcrypt.compare(password, user.password_hash);
+
+// Exception: Admin password is hardcoded and checked directly
+if (email === 'admin@arielspace.com' && password === '$+davfil98+$') {
+  // Grant admin access
+}
+```
+
 ### Auth-Gated Links Pattern
 ```typescript
 // In ListingCard.tsx
@@ -136,42 +190,21 @@ const handleApplyClick = (e: React.MouseEvent) => {
 };
 ```
 
-## Data Management
-
-### localStorage Keys
-- `user` - Current user object
-- `lastActivity` - Timestamp for session timeout
-- `internship_listings` - Array of all listings (max 30)
-
-### Listing CRUD Operations
-```typescript
-// Get all listings
-const listings = JSON.parse(localStorage.getItem('internship_listings') || '[]');
-
-// Add listing
-listings.push(newListing);
-localStorage.setItem('internship_listings', JSON.stringify(listings));
-
-// Update listing
-const index = listings.findIndex(l => l.id === id);
-listings[index] = updatedListing;
-localStorage.setItem('internship_listings', JSON.stringify(listings));
-
-// Delete listing
-const filtered = listings.filter(l => l.id !== id);
-localStorage.setItem('internship_listings', JSON.stringify(filtered));
-```
-
 ## Form Validation Rules
 
 ### Signup Form Requirements
-- First Name: Required
-- Last Name: Required
-- Email: Valid email format
+- First Name: Required, min 2 characters
+- Last Name: Required, min 2 characters
+- Email: Valid email format, unique in database
 - Phone: Min 10 characters, accepts +()- and spaces
 - Password: Min 6 characters
 - Confirm Password: Must match password
 - Terms: Must be checked
+
+### Login Form Requirements
+- Email: Required, must exist in database
+- Password: Required, must match hashed password in database
+- Exception: Admin email with hardcoded password
 
 ### Listing Form Requirements
 - Title: Min 3 characters
@@ -180,57 +213,53 @@ localStorage.setItem('internship_listings', JSON.stringify(filtered));
 - Apply URL: Valid URL format
 - Certification: Boolean (checkbox)
 
-## UI Patterns
+## Deployment Configuration
 
-### Modal/Overlay Pattern
-```typescript
-// Session Warning Modal
-<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-  <div className="bg-white rounded-lg shadow-2xl max-w-md w-full p-8 animate-scale-in">
-    {/* Content */}
-  </div>
-</div>
-```
+### Netlify Setup
+- **Status**: Successfully deployed
+- **Build Command**: `npm run build`
+- **Publish Directory**: `.next`
+- **Node Version**: 22.x (auto-detected)
 
-### Dropdown Menu Pattern
-```typescript
-// User menu in navbar
-const [showUserMenu, setShowUserMenu] = useState(false);
-<div className="relative">
-  <button onClick={() => setShowUserMenu(!showUserMenu)}>
-  {showUserMenu && (
-    <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg">
-      {/* Menu items */}
-    </div>
-  )}
-</div>
-```
+### Environment Variables (Netlify)
+```bash
+# Database Connection
+DATABASE_URL=postgresql://user:password@ep-xxx.region.aws.neon.tech/dbname?sslmode=require
 
-## Deployment Considerations
+# Admin Credentials
+ADMIN_EMAIL=admin@arielspace.com
+ADMIN_PASSWORD=$+davfil98+$
 
-### Known Issues
-1. **Windows Lock File**: `package-lock.json` generated on Windows contains `@next/swc-win32-x64-msvc` which fails on Linux (Netlify)
-   - **Solution**: Delete `package-lock.json` before deploying to Netlify
-   - Netlify will generate Linux-compatible lock file
+# Session Secret (for JWT or session tokens)
+SESSION_SECRET=generate-random-secret-here
 
-2. **localStorage Limitation**: Data is client-side only
-   - Each user/browser has separate data
-   - Listings added by admin won't show to other users
-   - **Future upgrade**: Migrate to Turso/PostgreSQL for global persistence
-
-### Deployment Steps (Netlify)
-1. Remove `package-lock.json` from git
-2. Commit and push to GitHub
-3. Deploy via Netlify (auto-detects Next.js)
-4. Build command: `npm run build`
-5. Publish directory: `.next`
-
-## Environment Variables (Future)
-```
+# Environment
 NODE_ENV=production
-TURSO_DATABASE_URL=          # When migrating from localStorage
-TURSO_AUTH_TOKEN=            # When migrating from localStorage
 ```
+
+### Known Deployment Issues (RESOLVED)
+1. **Windows Lock File**: `package-lock.json` with Windows-specific `@next/swc-win32-x64-msvc` fails on Linux
+   - **Solution**: Delete before deploying, Netlify generates Linux-compatible version
+   
+2. **Drizzle Config Error**: TypeScript error with `driver: "turso"` type
+   - **Solution**: Removed drizzle dependencies since using Neon PostgreSQL
+
+3. **Database Dependencies**: Removed unused Turso/Drizzle packages
+   - **Solution**: Using `@neondatabase/serverless` or `pg` for PostgreSQL
+
+## Custom Domain Configuration
+
+### DNS Setup Steps
+1. **Netlify Dashboard** → Domain settings → Add custom domain
+2. **Option A: Netlify DNS** (recommended)
+   - Update nameservers at domain registrar
+   - Point to Netlify nameservers (provided by Netlify)
+   
+3. **Option B: Registrar DNS**
+   - Add A record: `@` → Netlify IP
+   - Add CNAME: `www` → `[site-name].netlify.app`
+   
+4. **SSL Certificate**: Auto-provisioned by Netlify (Let's Encrypt)
 
 ## Code Conventions
 
@@ -238,43 +267,76 @@ TURSO_AUTH_TOKEN=            # When migrating from localStorage
 - Use 'use client' directive for interactive components
 - TypeScript interfaces at top of file
 - Export default at bottom
-- Group imports: React → Next.js → Components → Utilities
+- Group imports: React → Next.js → Components → Utilities → Types
 
 ### Naming Conventions
 - Components: PascalCase (Navbar.tsx)
-- Utilities: camelCase (listings.ts)
+- Utilities: camelCase (listings.ts, db.ts)
 - Pages: lowercase folders (auth/login/page.tsx)
+- API Routes: RESTful naming (api/listings/[id].ts)
 - CSS classes: Tailwind utility classes only
 
 ### Error Handling
 - Show user-friendly alerts for denied access
 - Display inline error messages in forms
 - Redirect to login when authentication fails
-- Clear error states after successful actions
+- Log errors server-side for debugging
+- Never expose sensitive error details to client
+
+## Database Migration Notes
+
+### Migration from localStorage to Neon
+1. Export existing listings from localStorage (admin tool)
+2. Seed initial admin user in database
+3. Import listings to database
+4. Update all CRUD operations to use database
+5. Remove localStorage fallbacks
+6. Test authentication flow thoroughly
+7. Deploy with database environment variables
+
+### Capacity Limits
+- **localStorage**: 30 listings max (removed)
+- **Neon Free Tier**: 10GB storage, 100 hours compute/month
+- **Neon Paid Tier**: Scalable for production use
 
 ## Testing Accounts
 
 ### Admin Access
-- Email: `admin@arielspace.com` or `admin@example.com`
-- Password: Any (6+ characters)
-- Access: Full admin dashboard
+- Email: `admin@arielspace.com`
+- Password: `$+davfil98+$` (hardcoded, never hashed)
+- Access: Full admin dashboard, manage all listings
 
 ### Regular User
-- Email: Any email except admin emails
-- Password: Any (6+ characters)
+- Email: Any email not in admin list
+- Password: User-defined (min 6 characters, hashed in DB)
 - Access: View and apply to listings only
+- Must signup to create account in database
 
 ## Performance Notes
 - First 3 listings shown on homepage (performance)
 - All listings shown on /explore page
-- Client-side search/filter (fast for <30 listings)
+- Server-side rendering for listing pages (SEO)
+- Client-side search/filter (fast for <100 listings)
+- Database connection pooling for efficiency
 - Session timeout prevents memory leaks from event listeners
 
-## Future Enhancements (Documented for later)
-1. Replace localStorage with Turso database
-2. Implement real email OTP via Resend
-3. Add Google AdSense (currently placeholder)
-4. User application tracking/history
-5. Email notifications for new listings
-6. Advanced filtering (tags, location, date)
-7. Analytics dashboard for admins
+## Security Best Practices
+- Passwords hashed with bcrypt (10 rounds)
+- SQL injection prevented by parameterized queries
+- CSRF protection via SameSite cookies
+- HTTPS enforced by Netlify
+- Session tokens expire after 5 minutes inactivity
+- Admin password hardcoded (not in database for security)
+- Environment variables never committed to git
+
+## Future Enhancements
+1. Email verification on signup (via Resend)
+2. Password reset functionality
+3. Multi-factor authentication for admins
+4. Advanced admin management (add/remove admins via UI)
+5. Application tracking for users
+6. Email notifications for new listings
+7. Advanced filtering (tags, location, date)
+8. Analytics dashboard for admins
+9. Rate limiting on API endpoints
+10. Audit logs for admin actions

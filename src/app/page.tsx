@@ -8,19 +8,29 @@ import AdSidebar from '@/components/AdSidebar';
 import Footer from '@/components/Footer';
 import WelcomeMessage from '@/components/WelcomeMessage';
 import SessionWarning from '@/components/SessionWarning';
-import { getAllListings } from '@/lib/listings';
-
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [allListings, setAllListings] = useState<any[]>([]);
   const [filteredListings, setFilteredListings] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const listings = getAllListings();
-    // Show only first 3 on homepage
-    const featured = listings.slice(0, 3);
-    setAllListings(featured);
-    setFilteredListings(featured);
+    // Fetch listings from API
+    async function fetchListings() {
+      try {
+        const response = await fetch('/api/listings');
+        const data = await response.json();
+        // Show only first 3 on homepage
+        const featured = data.listings.slice(0, 3);
+        setAllListings(featured);
+        setFilteredListings(featured);
+      } catch (error) {
+        console.error('Error fetching listings:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    fetchListings();
   }, []);
 
   const handleSearch = (query: string) => {
@@ -71,7 +81,12 @@ export default function Home() {
               Find Your Next Project And Internship With Certification
             </h2>
             
-            {filteredListings.length > 0 ? (
+            {isLoading ? (
+              <div className="text-center py-12">
+                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+                <p className="mt-4 text-slate-600">Loading listings...</p>
+              </div>
+            ) : filteredListings.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                 {filteredListings.map((listing) => (
                   <ListingCard key={listing.id} {...listing} />

@@ -54,17 +54,43 @@ export default function SignupPage() {
       return;
     }
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      // Call signup API
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          phone: formData.phone,
+        }),
+      });
 
-    const fullName = `${formData.firstName} ${formData.lastName}`;
-    login(formData.email, fullName);
-    setIsLoading(false);
-    
-    // Redirect to intended page or home
-    const redirectTo = sessionStorage.getItem('redirectAfterLogin') || '/';
-    sessionStorage.removeItem('redirectAfterLogin');
-    router.push(redirectTo);
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'Signup failed. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Login user with returned data
+      login(data.user.email, data.user.name);
+      
+      // Redirect to intended page or home
+      const redirectTo = sessionStorage.getItem('redirectAfterLogin') || '/';
+      sessionStorage.removeItem('redirectAfterLogin');
+      router.push(redirectTo);
+
+    } catch (err: any) {
+      console.error('Signup error:', err);
+      setError('Network error. Please check your connection and try again.');
+      setIsLoading(false);
+    }
   };
 
   return (
