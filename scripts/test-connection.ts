@@ -14,6 +14,12 @@ if (!connectionString) {
 
 async function testConnection() {
   console.log('🔌 Testing database connection...\n');
+  
+  if (!connectionString) {
+    console.error('❌ DATABASE_URL environment variable is not set');
+    process.exit(1);
+  }
+  
   console.log('Connection string (masked):', connectionString.replace(/:[^@]+@/, ':***@'));
 
   const pool = new Pool({
