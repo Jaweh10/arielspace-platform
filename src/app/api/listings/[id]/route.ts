@@ -1,10 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+let pool: Pool | null = null;
+
+function getPool() {
+  if (!pool) {
+    if (!process.env.DATABASE_URL && !process.env.NETLIFY_DATABASE_URL) {
+      throw new Error('DATABASE_URL environment variable is not set');
+    }
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL || process.env.NETLIFY_DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    });
+  }
+  return pool;
+}
 
 // GET single listing by ID
 export async function GET(
@@ -12,16 +25,18 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const client = await pool.connect();
+  let client;
 
   try {
+    const dbPool = getPool();
+    client = await dbPool.connect();
+
     const result = await client.query(
       'SELECT * FROM listings WHERE id = $1',
       [id]
     );
 
     if (result.rows.length === 0) {
-      client.release();
       return NextResponse.json(
         { error: 'Listing not found' },
         { status: 404 }
@@ -43,17 +58,25 @@ export async function GET(
       createdBy: row.created_by,
     };
 
-    client.release();
-
     return NextResponse.json({ listing });
 
   } catch (error: any) {
-    client.release();
-    console.error('Database error:', error);
+    console.error('Database error fetching listing:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch listing' },
+      { 
+        error: 'Failed to fetch listing',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
+  } finally {
+    if (client) {
+      try {
+        client.release();
+      } catch (releaseError) {
+        console.error('Error releasing client:', releaseError);
+      }
+    }
   }
 }
 
@@ -63,7 +86,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const client = await pool.connect();
+  let client;
 
   try {
     const body = await request.json();
@@ -71,12 +94,14 @@ export async function PUT(
 
     // Validate required fields
     if (!title || !shortDescription || !fullDetails || !applyUrl) {
-      client.release();
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
+
+    const dbPool = getPool();
+    client = await dbPool.connect();
 
     const result = await client.query(
       `UPDATE listings
@@ -88,7 +113,6 @@ export async function PUT(
     );
 
     if (result.rows.length === 0) {
-      client.release();
       return NextResponse.json(
         { error: 'Listing not found' },
         { status: 404 }
@@ -110,17 +134,25 @@ export async function PUT(
       createdBy: row.created_by,
     };
 
-    client.release();
-
     return NextResponse.json({ listing });
 
   } catch (error: any) {
-    client.release();
-    console.error('Database error:', error);
+    console.error('Database error updating listing:', error);
     return NextResponse.json(
-      { error: 'Failed to update listing' },
+      { 
+        error: 'Failed to update listing',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
+  } finally {
+    if (client) {
+      try {
+        client.release();
+      } catch (releaseError) {
+        console.error('Error releasing client:', releaseError);
+      }
+    }
   }
 }
 
@@ -130,32 +162,42 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const client = await pool.connect();
+  let client;
 
   try {
+    const dbPool = getPool();
+    client = await dbPool.connect();
+
     const result = await client.query(
       'DELETE FROM listings WHERE id = $1 RETURNING id',
       [id]
     );
 
     if (result.rows.length === 0) {
-      client.release();
       return NextResponse.json(
         { error: 'Listing not found' },
         { status: 404 }
       );
     }
 
-    client.release();
-
     return NextResponse.json({ success: true });
 
   } catch (error: any) {
-    client.release();
-    console.error('Database error:', error);
+    console.error('Database error deleting listing:', error);
     return NextResponse.json(
-      { error: 'Failed to delete listing' },
+      { 
+        error: 'Failed to delete listing',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
+  } finally {
+    if (client) {
+      try {
+        client.release();
+      } catch (releaseError) {
+        console.error('Error releasing client:', releaseError);
+      }
+    }
   }
 }

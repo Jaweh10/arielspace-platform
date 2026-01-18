@@ -1,16 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+let pool: Pool | null = null;
+
+function getPool() {
+  if (!pool) {
+    if (!process.env.DATABASE_URL && !process.env.NETLIFY_DATABASE_URL) {
+      throw new Error('DATABASE_URL environment variable is not set');
+    }
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL || process.env.NETLIFY_DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    });
+  }
+  return pool;
+}
 
 // GET all listings
 export async function GET(request: NextRequest) {
-  const client = await pool.connect();
+  let client;
 
   try {
+    const dbPool = getPool();
+    client = await dbPool.connect();
+
     const result = await client.query(
       'SELECT * FROM listings ORDER BY created_at DESC'
     );
@@ -29,23 +45,32 @@ export async function GET(request: NextRequest) {
       createdBy: row.created_by,
     }));
 
-    client.release();
-
     return NextResponse.json({ listings });
 
   } catch (error: any) {
-    client.release();
-    console.error('Database error:', error);
+    console.error('Database error fetching listings:', error);
+    console.error('Error stack:', error.stack);
     return NextResponse.json(
-      { error: 'Failed to fetch listings' },
+      { 
+        error: 'Failed to fetch listings',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
+  } finally {
+    if (client) {
+      try {
+        client.release();
+      } catch (releaseError) {
+        console.error('Error releasing client:', releaseError);
+      }
+    }
   }
 }
 
 // POST create new listing
 export async function POST(request: NextRequest) {
-  const client = await pool.connect();
+  let client;
 
   try {
     const body = await request.json();
@@ -53,12 +78,14 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!title || !shortDescription || !fullDetails || !applyUrl) {
-      client.release();
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
+
+    const dbPool = getPool();
+    client = await dbPool.connect();
 
     const result = await client.query(
       `INSERT INTO listings (title, short_description, full_details, has_certification, apply_url, location, duration, deadline, created_by)
@@ -81,16 +108,28 @@ export async function POST(request: NextRequest) {
       createdBy: result.rows[0].created_by,
     };
 
-    client.release();
-
     return NextResponse.json({ listing }, { status: 201 });
 
   } catch (error: any) {
-    client.release();
-    console.error('Database error:', error);
+    console.error('Database error creating listing:', error);
+    console.error('Error stack:', error.stack);
+    console.error('DATABASE_URL set:', !!process.env.DATABASE_URL);
+    console.error('NETLIFY_DATABASE_URL set:', !!process.env.NETLIFY_DATABASE_URL);
+    
     return NextResponse.json(
-      { error: 'Failed to create listing' },
+      { 
+        error: 'Failed to create listing',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
+  } finally {
+    if (client) {
+      try {
+        client.release();
+      } catch (releaseError) {
+        console.error('Error releasing client:', releaseError);
+      }
+    }
   }
 }
